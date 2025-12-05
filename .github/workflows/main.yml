@@ -1,0 +1,88 @@
+name: Release Overleaf App (Daily)
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 0 * * *'
+
+jobs:
+  build-app:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          repository: yu-i-i/overleaf-cep
+          ref: ext-ce
+          path: overleaf
+          fetch-depth: 0
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Generate Release Tags
+        id: meta
+        working-directory: overleaf
+        run: |
+          git fetch --tags
+
+          # Find the highest version number in the repo, regardless of branch
+          UPSTREAM_TAG=$(git tag --sort=-v:refname | head -n 1)
+
+          # Fallback if no tags exist
+          if [ -z "$UPSTREAM_TAG" ]; then
+             UPSTREAM_TAG="no-tag"
+          fi
+
+          echo "Detected Version: $UPSTREAM_TAG"
+          echo "version=$UPSTREAM_TAG" >> $GITHUB_OUTPUT
+
+      - name: Check Registry for Existing Tag
+        id: check-registry
+        if: steps.meta.outputs.version != 'no-tag'
+        run: |
+          EXISTS="false"
+          if docker manifest inspect ${{ secrets.DOCKER_USERNAME }}/overleaf:${{ steps.meta.outputs.version }} > /dev/null 2>&1; then
+             echo "Image ${{ secrets.DOCKER_USERNAME }}/overleaf:${{ steps.meta.outputs.version }} already exists on Docker Hub."
+             EXISTS="true"
+          else
+             echo "Image tag not found. Proceeding with build."
+          fi
+          echo "exists=$EXISTS" >> $GITHUB_OUTPUT
+
+      - name: Checkout Latest Tag
+        id: checkout-tag
+        # Only run if we have a tag AND it doesn't exist in the registry yet
+        if: steps.meta.outputs.version != 'no-tag' && steps.check-registry.outputs.exists != 'true'
+        working-directory: overleaf
+        run: |
+          # Explicitly switch the code to match the detected version
+          echo "Switching HEAD from $(git rev-parse --short HEAD) to ${{ steps.meta.outputs.version }}"
+          git checkout ${{ steps.meta.outputs.version }}
+          echo "Current HEAD is now $(git rev-parse --short HEAD)"
+
+      - name: Build and Push App
+        # Only run if we have a tag AND it doesn't exist in the registry yet
+        if: steps.meta.outputs.version != 'no-tag' && steps.check-registry.outputs.exists != 'true'
+        working-directory: overleaf
+        run: |
+          # Patch Dockerfile to use the monthly base image
+          sed -i "s|sharelatex/sharelatex-base[^ ]*|${{ secrets.DOCKER_USERNAME }}/overleaf-base:latest|g" server-ce/Dockerfile
+
+          TAGS="--tag ${{ secrets.DOCKER_USERNAME }}/overleaf:latest"
+
+          if [ "${{ steps.meta.outputs.version }}" != "no-tag" ]; then
+             TAGS="$TAGS --tag ${{ secrets.DOCKER_USERNAME }}/overleaf:${{ steps.meta.outputs.version }}"
+          fi
+
+          docker buildx build \
+            --platform linux/arm64 \
+            --file server-ce/Dockerfile \
+            $TAGS \
+            --push .

@@ -1,0 +1,37 @@
+name: Build Base Image (Monthly)
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 0 1 * *'
+
+jobs:
+  build-base:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          repository: yu-i-i/overleaf-cep
+          ref: ext-ce
+          path: overleaf
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and Push Base
+        working-directory: overleaf
+        run: |
+          sed -i 's/scheme-basic/scheme-full/g' server-ce/Dockerfile-base
+
+          docker buildx build \
+            --platform linux/arm64 \
+            --file server-ce/Dockerfile-base \
+            --tag ${{ secrets.DOCKER_USERNAME }}/overleaf-base:latest \
+            --push .
