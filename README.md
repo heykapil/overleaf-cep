@@ -170,4 +170,4 @@ This repository uses a GitHub Action to automate the release process:
 
 ## 📄 License
 
-This Docker build repository is open source. Please refer to the upstream projects for the specific licensing of the Overleaf application code (AGPL-3.0).
+This Docker build repository is open source. Please refer to the upstream projects for the specific licensing of the Overleaf application code (AGPL-3.0). The docker images provided are 'as is' without warranty of any kind and for research and educational purpose. 
