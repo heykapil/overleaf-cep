@@ -32,42 +32,88 @@ To run this on your ARM64 server, use the following `docker-compose.yml`.
 **Note:** This setup requires MongoDB and Redis.
 
 ```yaml
-version: '3.8'
-
 services:
-  sharelatex:
-    image: heykapil/overleaf:latest
-    container_name: sharelatex
-    restart: always
-    ports:
-      - "80:80"
-    volumes:
-      - ./overleaf_data:/var/lib/sharelatex
-    environment:
-      - SHARELATEX_APP_NAME=Overleaf Community Edition
-      - SHARELATEX_MONGO_URL=mongodb://mongo:27017/sharelatex
-      - SHARELATEX_REDIS_HOST=redis
-      - REDIS_HOST=redis
-      - ENABLED_LINKED_SERVICES=true
-      - ENABLED_V2_TEMPLATES=true
-      # Add other standard Overleaf environment variables here
-    depends_on:
-      - mongo
-      - redis
-
   mongo:
-    image: mongo:5.0
+    image: mongo:6.0
     container_name: mongo
+    command: "--replSet overleaf"
     restart: always
+    extra_hosts:
+      - "mongo:127.0.0.1"
+    environment:
+      MONGO_INITDB_DATABASE: sharelatex
+    healthcheck:
+      test: echo 'db.stats().ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 10s
+      retries: 5
     volumes:
-      - ./mongo_data:/data/db
+      - mongo_data:/data/db
+      - /opt/overleaf-config/mongodb-init.js:/docker-entrypoint-initdb.d/mongodb-init.js
+    networks:
+      - dokploy-network
 
   redis:
     image: redis:6.2
     container_name: redis
     restart: always
     volumes:
-      - ./redis_data:/data
+      - redis_data:/data
+    networks:
+      - dokploy-network
+
+  sharelatex:
+    # STEP 1: Use your custom built image
+    image: heykapil/overleaf:latest 
+    # container_name: sharelatex
+    restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/login"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+    depends_on:
+      - mongo
+      - redis
+    volumes:
+      - sharelatex_data:/var/lib/overleaf
+      # Optional: Mount local configs if you want to edit them without rebuilding
+      # - ./overleaf_data/settings.js:/etc/overleaf/settings.js 
+    environment:
+      OVERLEAF_MONGO_URL: mongodb://mongo/sharelatex
+      OVERLEAF_REDIS_HOST: redis
+      REDIS_HOST: redis
+      OVERLEAF_APP_NAME: "LaTeX"
+      OVERLEAF_SITE_URL: "https://latex.example.com"
+      OVERLEAF_NAV_TITLE: "LaTeX"
+      OVERLEAF_HEADER_IMAGE_URL: "https://example.com/logo.png"
+      NAV_HIDE_POWERED_BY: "true"
+      OVERLEAF_ADMIN_EMAIL: "example@gmail.com" 
+      OVERLEAF_ENABLE_DOC_HISTORY: "true"
+      OVERLEAF_ENABLE_TRACK_CHANGES: "true"
+      # OVERLEAF_TEMPLATE_GALLERY: "true"
+      ENABLE_CONVERSIONS: "true"
+      ENABLED_LINKED_FILE_TYPES: "project_file,project_output_file,url"
+      EMAIL_CONFIRMATION_DISABLED: "false" 
+      # OVERLEAF_EMAIL_FROM_ADDRESS: "example@gmail.com" 
+      # OVERLEAF_EMAIL_SMTP_HOST: "smtp.gmail.com"
+      # OVERLEAF_EMAIL_SMTP_PORT: "587"
+      # OVERLEAF_EMAIL_SMTP_SECURE: "false" 
+      # OVERLEAF_EMAIL_SMTP_USER: ""
+      # OVERLEAF_EMAIL_SMTP_PASS: ""
+      OVERLEAF_EMAIL_SMTP_TLS_REJECT_UNAUTHORIZED: "false"
+      OVERLEAF_ALLOW_PUBLIC_ACCESS: "true" 
+      NODE_ENV: "production"
+
+volumes:
+  mongo_data:
+  redis_data:
+  sharelatex_data:
+
+networks:
+  dokploy-network:
+    external: true
 ````
 
 ### Running the stack
@@ -75,6 +121,15 @@ services:
 ```bash
 docker-compose up -d
 ```
+
+Note: 
+1. Fix MongoDB Crash Loop (Replica Set Issue) If the Mongo container keeps restarting or ShareLaTeX cannot connect, the replica set might not have initialized. This often happens if the data volume wasn't empty on the first boot. Force initialization manually:
+```bash
+docker exec -it $(docker ps -qf "name=mongo") mongosh --eval "rs.initiate({ _id: 'overleaf', members: [{ _id: 0, host: 'mongo:27017' }] })"
+```
+Success indicator: If it prints `{ "ok" : 1 }`, the database is fixed. ShareLaTeX will connect automatically within 60 seconds.
+
+2. Fix Blank Screen (Cloudflare Users) If you see a blank screen or infinite loading, check your browser console. If you see errors related to rocket-loader.min.js violating Content Security Policy (CSP), Cloudflare is breaking the app. Turn off the Rocket Loader in Speed > Optimization of your Cloudflare dashboard and purge cache.
 
 ## ⚙️ How the Build Works
 
