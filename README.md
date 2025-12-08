@@ -1,7 +1,7 @@
 # Overleaf CEP (Community Edition) - ARM64 Docker Images 
 
 [![Docker Pulls](https://img.shields.io/docker/pulls/heykapil/overleaf?style=flat-square)](https://hub.docker.com/r/heykapil/overleaf)
-[![Build Status](https://img.shields.io/github/actions/workflow/status/heykapil/overleaf-cep/main.yml?branch=docker&label=Build&style=flat-square)](https://github.com/heykapil/overleaf-cep/actions)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/heykapil/overleaf-cep/main.yml?branch=arm64-docker&label=Build&style=flat-square)](https://github.com/heykapil/overleaf-cep/actions)
 [![Platform](https://img.shields.io/badge/Platform-linux%2Farm64-orange?style=flat-square)](https://hub.docker.com/r/heykapil/overleaf/tags)
 
 This repository provides automated, daily builds of **Overleaf Community Edition (Extended)** specifically optimized for **ARM64** architectures (Apple Silicon, Raspberry Pi, Oracle Cloud ARM, AWS Graviton).
