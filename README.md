@@ -27,9 +27,9 @@ Tags available:
 
 ## 🚀 Usage (Docker Compose)
 
-To run this on your ARM64 server, use the following `docker-compose.yml`.
+To run this on your ARM64 server, use the following `docker-compose.yml`. A better way is to use dokploy or coolify to do this for you.
 
-**Note:** This setup requires MongoDB and Redis.
+**Note:** This setup requires MongoDB and Redis. In my case, i am using dokploy, `dokploy-network` is used to expose the redis and mongo to the same network.
 
 ```yaml
 services:
@@ -118,11 +118,30 @@ networks:
 
 ### Running the stack
 
+Create a directory `/opt/overleaf-config` for `mongodb-init.js` file. 
+
+```
+sudo mkdir -p /opt/overleaf-config
+```
+
+Create the initialization script: Copy and paste this entire block into your terminal:
+
+```bash
+cat << 'EOF' | sudo tee /opt/overleaf-config/mongodb-init.js
+rs.initiate({
+  _id: "overleaf",
+  members: [{ _id: 0, host: "mongo:27017" }]
+})
+EOF
+```
+
+Deploy and start the containers.
+
 ```bash
 docker-compose up -d
 ```
 
-Note: 
+**Note:**  
 1. Fix MongoDB Crash Loop (Replica Set Issue) If the Mongo container keeps restarting or ShareLaTeX cannot connect, the replica set might not have initialized. This often happens if the data volume wasn't empty on the first boot. Force initialization manually:
 ```bash
 docker exec -it $(docker ps -qf "name=mongo") mongosh --eval "rs.initiate({ _id: 'overleaf', members: [{ _id: 0, host: 'mongo:27017' }] })"
